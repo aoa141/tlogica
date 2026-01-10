@@ -16,10 +16,10 @@ public class LogicaController : ControllerBase
     }
 
     /// <summary>
-    /// Compiles a Logica program to T-SQL
+    /// Compiles a Logica program to SQL for the specified dialect
     /// </summary>
-    /// <param name="request">The Logica program and predicate to compile</param>
-    /// <returns>The generated T-SQL or an error message</returns>
+    /// <param name="request">The Logica program, predicate, and optional dialect to compile</param>
+    /// <returns>The generated SQL or an error message</returns>
     [HttpPost("compile")]
     [ProducesResponseType<LogicaResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<LogicaResponse>(StatusCodes.Status400BadRequest)]
@@ -43,7 +43,18 @@ public class LogicaController : ControllerBase
             });
         }
 
-        var response = _compilerService.CompileToSql(request);
+        // Validate dialect if provided
+        var dialect = request.Dialect?.ToLowerInvariant() ?? LogicaRequest.DefaultDialect;
+        if (!LogicaRequest.SupportedDialects.Contains(dialect))
+        {
+            return BadRequest(new LogicaResponse
+            {
+                Success = false,
+                Error = $"Unsupported dialect: '{request.Dialect}'. Supported dialects are: {string.Join(", ", LogicaRequest.SupportedDialects)}"
+            });
+        }
+
+        var response = _compilerService.CompileToSql(request, dialect);
 
         if (!response.Success)
         {
@@ -51,5 +62,16 @@ public class LogicaController : ControllerBase
         }
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Returns the list of supported SQL dialects
+    /// </summary>
+    /// <returns>Array of supported dialect names</returns>
+    [HttpGet("dialects")]
+    [ProducesResponseType<string[]>(StatusCodes.Status200OK)]
+    public ActionResult<string[]> GetSupportedDialects()
+    {
+        return Ok(LogicaRequest.SupportedDialects);
     }
 }

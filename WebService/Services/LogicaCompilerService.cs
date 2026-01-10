@@ -59,14 +59,15 @@ public class LogicaCompilerService
         return "python";
     }
 
-    public LogicaResponse CompileToSql(LogicaRequest request)
+    public LogicaResponse CompileToSql(LogicaRequest request, string dialect)
     {
         try
         {
             var inputJson = JsonSerializer.Serialize(new
             {
                 program = request.Program,
-                predicate = request.Predicate
+                predicate = request.Predicate,
+                dialect = dialect
             });
 
             var psi = new ProcessStartInfo
@@ -114,7 +115,8 @@ public class LogicaCompilerService
                 return new LogicaResponse
                 {
                     Success = true,
-                    Sql = result.GetProperty("sql").GetString()
+                    Sql = result.GetProperty("sql").GetString(),
+                    Dialect = dialect
                 };
             }
             else
@@ -122,7 +124,8 @@ public class LogicaCompilerService
                 return new LogicaResponse
                 {
                     Success = false,
-                    Error = result.TryGetProperty("error", out var err) ? err.GetString() : "Unknown error"
+                    Error = result.TryGetProperty("error", out var err) ? err.GetString() : "Unknown error",
+                    Dialect = dialect
                 };
             }
         }
