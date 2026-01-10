@@ -1,28 +1,25 @@
-using IronPython.Hosting;
-using Microsoft.Scripting.Hosting;
+using System.Diagnostics;
+using System.Text.Json;
 using WebService.Models;
 
 namespace WebService.Services;
 
-public class LogicaCompilerService : IDisposable
+public class LogicaCompilerService
 {
-    private readonly ScriptEngine _engine;
-    private readonly ScriptScope _scope;
     private readonly string _logicaPath;
-    private bool _initialized;
-    private readonly object _lock = new();
+    private readonly string _pythonPath;
+    private readonly string _compilerScript;
 
-    public LogicaCompilerService(string? logicaPath = null)
+    public LogicaCompilerService(string? logicaPath = null, string? pythonPath = null)
     {
         _logicaPath = logicaPath ?? GetDefaultLogicaPath();
-        _engine = Python.CreateEngine();
-        _scope = _engine.CreateScope();
+        _pythonPath = pythonPath ?? "python";
+        _compilerScript = CreateCompilerScript();
     }
 
     private static string GetDefaultLogicaPath()
     {
         var assemblyLocation = AppContext.BaseDirectory;
-        var webServiceDir = Path.GetDirectoryName(assemblyLocation);
 
         // Navigate up from bin/Debug/net10.0 to WebService, then up to repository root
         var current = new DirectoryInfo(assemblyLocation);
@@ -39,73 +36,109 @@ public class LogicaCompilerService : IDisposable
         throw new InvalidOperationException("Could not find logica.py in parent directories");
     }
 
-    private void EnsureInitialized()
+    private string CreateCompilerScript()
     {
-        if (_initialized) return;
+        var scriptPath = Path.Combine(_logicaPath, "WebService", "compile_logica.py");
 
-        lock (_lock)
+        if (!File.Exists(scriptPath))
         {
-            if (_initialized) return;
-
-            var searchPaths = _engine.GetSearchPaths().ToList();
-            searchPaths.Add(_logicaPath);
-            _engine.SetSearchPaths(searchPaths);
-
-            var initCode = $@"
+            var script = @"
 import sys
-sys.path.insert(0, r'{_logicaPath.Replace("\\", "\\\\")}')
-
-from parser_py import parse
-from compiler import universe
+import json
 
 def compile_to_sql(program_text, predicate_name):
     try:
+        from parser_py import parse
+        from compiler import universe
+
         parsed = parse.ParseFile(program_text)
         rules = parsed.get('rule', [])
 
         if not rules:
-            return None, 'No rules found in program'
+            return {'success': False, 'error': 'No rules found in program'}
 
         logic_program = universe.LogicaProgram(rules)
         sql = logic_program.FormattedPredicateSql(predicate_name)
-        return sql, None
+        return {'success': True, 'sql': sql}
     except Exception as e:
-        return None, str(e)
+        import traceback
+        return {'success': False, 'error': traceback.format_exc()}
+
+if __name__ == '__main__':
+    input_data = json.loads(sys.stdin.read())
+    result = compile_to_sql(input_data['program'], input_data['predicate'])
+    print(json.dumps(result))
 ";
-            _engine.Execute(initCode, _scope);
-            _initialized = true;
+            File.WriteAllText(scriptPath, script);
         }
+
+        return scriptPath;
     }
 
     public LogicaResponse CompileToSql(LogicaRequest request)
     {
         try
         {
-            EnsureInitialized();
-
-            lock (_lock)
+            var inputJson = JsonSerializer.Serialize(new
             {
-                _scope.SetVariable("program_text", request.Program);
-                _scope.SetVariable("predicate_name", request.Predicate);
+                program = request.Program,
+                predicate = request.Predicate
+            });
 
-                _engine.Execute("result_sql, result_error = compile_to_sql(program_text, predicate_name)", _scope);
+            var psi = new ProcessStartInfo
+            {
+                FileName = _pythonPath,
+                Arguments = $"\"{_compilerScript}\"",
+                WorkingDirectory = _logicaPath,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-                var sql = _scope.GetVariable<string?>("result_sql");
-                var error = _scope.GetVariable<string?>("result_error");
-
-                if (error != null)
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                return new LogicaResponse
                 {
-                    return new LogicaResponse
-                    {
-                        Success = false,
-                        Error = error
-                    };
-                }
+                    Success = false,
+                    Error = "Failed to start Python process"
+                };
+            }
 
+            process.StandardInput.Write(inputJson);
+            process.StandardInput.Close();
+
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (process.ExitCode != 0 || !string.IsNullOrEmpty(error))
+            {
+                return new LogicaResponse
+                {
+                    Success = false,
+                    Error = string.IsNullOrEmpty(error) ? output : error
+                };
+            }
+
+            var result = JsonSerializer.Deserialize<JsonElement>(output);
+
+            if (result.TryGetProperty("success", out var success) && success.GetBoolean())
+            {
                 return new LogicaResponse
                 {
                     Success = true,
-                    Sql = sql
+                    Sql = result.GetProperty("sql").GetString()
+                };
+            }
+            else
+            {
+                return new LogicaResponse
+                {
+                    Success = false,
+                    Error = result.TryGetProperty("error", out var err) ? err.GetString() : "Unknown error"
                 };
             }
         }
@@ -117,11 +150,5 @@ def compile_to_sql(program_text, predicate_name):
                 Error = ex.Message
             };
         }
-    }
-
-    public void Dispose()
-    {
-        _engine.Runtime.Shutdown();
-        GC.SuppressFinalize(this);
     }
 }
