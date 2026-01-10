@@ -1419,7 +1419,7 @@ def ParseImport(file_import_str, parsed_imports, import_chain, import_root):
               'import ' + file_import_str + '.<PREDICATE>')[7:-11])
 
   with open(file_path) as f:
-    file_content = f.read()
+    file_content = f.read().replace('\r\n', '\n').replace('\r', '\n')
   parsed_file = ParseFile(file_content, file_import_str, parsed_imports,
                           import_chain, import_root)
   parsed_imports[file_import_str] = parsed_file

@@ -122,7 +122,7 @@ def RunSQL(sql, engine, connection=None, is_final=False,
 def Run(filename, predicate_name,
         output_format='artistic_table', display_mode='terminal'):
   try:
-    rules = parse.ParseFile(open(filename).read())['rule']
+    rules = parse.ParseFile(open(filename).read().replace('\r\n', '\n').replace('\r', '\n'))['rule']
   except parse.ParsingException as parsing_exception:
     parsing_exception.ShowMessage()
     sys.exit(1)
@@ -160,7 +160,7 @@ def Run(filename, predicate_name,
 def RunMany(filename, predicate_names,
             output_format='artistic_table', display_mode='terminal'):
   try:
-    rules = parse.ParseFile(open(filename).read())['rule']
+    rules = parse.ParseFile(open(filename).read().replace('\r\n', '\n').replace('\r', '\n'))['rule']
   except parse.ParsingException as parsing_exception:
     parsing_exception.ShowMessage()
     sys.exit(1)

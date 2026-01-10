@@ -118,7 +118,7 @@ def ConnectClingo(connection,
   def RunClingoFile(program_file: str) -> duckdb.list_type(
       duckdb.row_type(fields={'model': model_type,
                               'model_id': int})):
-    program = open(program_file).read()
+    program = open(program_file).read().replace('\r\n', '\n').replace('\r', '\n')
     return RunClingo(program)
 
   try:
@@ -158,7 +158,7 @@ def ConnectClingo(connection,
       program_file: str,
       substitutions: substitutions_type) -> list_of_models_type:
     # Read the template file
-    program_template = open(program_file).read()
+    program_template = open(program_file).read().replace('\r\n', '\n').replace('\r', '\n')
     # Apply substitutions and run
     return RunClingoTemplate(program_template, substitutions)
 
