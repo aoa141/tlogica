@@ -9,3 +9,6 @@ env
 **/dist
 **/bin
 **/obj
+
+.vs/
+*.csproj.user
