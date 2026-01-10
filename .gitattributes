@@ -1,0 +1,12 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Force LF line endings for shell scripts and Python files
+*.sh text eol=lf
+*.py text eol=lf
+*.l text eol=lf
+
+# Windows-specific files should keep CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
