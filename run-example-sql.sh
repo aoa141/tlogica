@@ -1,1 +1,1 @@
-python logica.py parent_example_sql.l print Grandparent
+python logica.py parent_example_sqlite.l print Grandparent
