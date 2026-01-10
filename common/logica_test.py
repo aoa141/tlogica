@@ -17,9 +17,20 @@
 # Lint as: python3
 """Utilities for YotaQL tests."""
 
+import difflib
 import os
 import subprocess
 import json
+
+
+def PrintDiff(result, golden_result):
+  """Print unified diff between result and golden_result."""
+  result_lines = result.splitlines(keepends=True)
+  golden_lines = golden_result.splitlines(keepends=True)
+  diff = difflib.unified_diff(golden_lines, result_lines,
+                              fromfile='golden', tofile='result')
+  for line in diff:
+    print(line, end='')
 
 if '.' not in __package__:
   from common import color
@@ -98,8 +109,7 @@ def RunTypesTest(name, src=None, golden=None,
   if result == golden_result:
     test_result = '{ok}PASSED{end}'
   else:
-    p = subprocess.Popen(['diff', '-', golden], stdin=subprocess.PIPE)
-    p.communicate(result.encode())
+    PrintDiff(result, golden_result)
     test_result = '{error}FAILED{end}'
 
   print('\033[F\033[K' + color.Format('% 50s   %s' % (name, test_result)))
@@ -141,12 +151,7 @@ def RunTest(name, src, predicate, golden,
   if result == golden_result:
     test_result = '{ok}PASSED{end}'
   else:
-    # print('\n' * 3)
-    # print(golden_result)
-    # print(result)
-    # print('\n' * 3)
-    p = subprocess.Popen(['diff', '--strip-trailing-cr', '-', golden], stdin=subprocess.PIPE)
-    p.communicate(result.encode())
+    PrintDiff(result, golden_result)
     if golden_result == 'This file does not exist. (<_<)':
       print('\x1B[3mGolden file is missing.\x1B[0m\n')
 
