@@ -27,6 +27,7 @@ if '.' not in __package__:
   from compiler.dialect_libraries import databricks_library
   from compiler.dialect_libraries import duckdb_library
   from compiler.dialect_libraries import mssql_library
+  from compiler.dialect_libraries import clickhouse_library
 else:
   from ..compiler.dialect_libraries import bq_library
   from ..compiler.dialect_libraries import psql_library
@@ -36,6 +37,7 @@ else:
   from ..compiler.dialect_libraries import databricks_library
   from ..compiler.dialect_libraries import duckdb_library
   from ..compiler.dialect_libraries import mssql_library
+  from ..compiler.dialect_libraries import clickhouse_library
 def Get(engine):
   return DIALECTS[engine]()
 
@@ -580,6 +582,86 @@ class MSSQL(Dialect):
       return DecorateCombineRule(rule, var)
 
 
+class ClickHouse(Dialect):
+    """ClickHouse SQL dialect"""
+
+    def Name(self):
+      return 'ClickHouse'
+
+    def BuiltInFunctions(self):
+      return {
+          'Range': 'range(0, {0})',
+          'ToString': 'toString(%s)',
+          'ToInt64': 'toInt64(%s)',
+          'ToFloat64': 'toFloat64(%s)',
+          'Element': '{0}[{1} + 1]',  # ClickHouse arrays are 1-indexed
+          'Size': 'length({0})',
+          'Count': 'uniqExact({0})',
+          'Join': 'arrayStringConcat({0}, {1})',
+          'StringAgg': 'groupArray(%s)',
+          'MagicalEntangle': 'if({1} = 0, {0}, NULL)',
+          'AnyValue': 'any(%s)',
+          'Split': 'splitByString({1}, {0})',
+          'ArrayConcat': 'arrayConcat({0}, {1})',
+          'Log': 'log(%s)',
+          'Least': 'least(%s)',
+          'Greatest': 'greatest(%s)',
+          'Abs': 'abs(%s)',
+          'Floor': 'floor(%s)',
+          'Ceiling': 'ceil(%s)',
+          'Round': 'round({0}, {1})',
+          'Length': 'length(%s)',
+          'Lower': 'lower(%s)',
+          'Upper': 'upper(%s)',
+          'Trim': 'trimBoth(%s)',
+          'Substr': 'substring({0}, {1} + 1, {2})',
+          'Replace': 'replaceAll({0}, {1}, {2})',
+          'Like': '({0} LIKE {1})',
+          'ILike': '({0} ILIKE {1})',
+          'IsNull': 'isNull({0})',
+          'Coalesce': 'coalesce(%s)',
+          'If': 'if({0}, {1}, {2})',
+          'DateAddDay': 'addDays({0}, {1})',
+          'DateDiffDay': "dateDiff('day', {1}, {0})",
+          'CurrentDate': 'today()',
+          'CurrentTimestamp': 'now()',
+          'Set': 'groupArrayDistinct({0})',
+          'List': 'groupArray({0})',
+          'Format': 'format(%s)',
+          'ValueOfUnnested': '{0}',
+      }
+
+    def InfixOperators(self):
+      return {
+          '++': 'concat(%s, %s)',
+          '%': '(%s) %% (%s)',
+          'in': 'has({right}, {left})'  # ClickHouse: has(array, element)
+      }
+
+    def Subscript(self, record, subscript, record_is_table):
+      if record_is_table:
+        return '%s.%s' % (record, subscript)
+      else:
+        # ClickHouse uses tupleElement for named tuples
+        return "tupleElement(%s, '%s')" % (record, subscript)
+
+    def LibraryProgram(self):
+      return clickhouse_library.library
+
+    def UnnestPhrase(self):
+      # ClickHouse uses ARRAY JOIN for unnesting
+      return 'ARRAY JOIN {0} AS {1}'
+
+    def ArrayPhrase(self):
+      return '[%s]'
+
+    def GroupBySpecBy(self):
+      return 'expr'
+
+    def DecorateCombineRule(self, rule, var):
+      return DecorateCombineRule(rule, var)
+
+
 DIALECTS = {
     'bigquery': BigQueryDialect,
     'sqlite': SqLiteDialect,
@@ -589,5 +671,6 @@ DIALECTS = {
     'databricks': Databricks,
     'duckdb': DuckDB,
     'mssql': MSSQL,
+    'clickhouse': ClickHouse,
 }
 

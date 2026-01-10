@@ -359,6 +359,20 @@ def main(argv):
           p = subprocess.Popen(['sqlcmd', '-Q', formatted_sql],
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
           o, _ = p.communicate()
+      elif engine == 'clickhouse':
+        from common import clickhouse_logica
+        connection_str = os.environ.get('LOGICA_CLICKHOUSE_CONNECTION')
+        if connection_str:
+          connection = clickhouse_logica.ConnectToClickHouse('environment')
+        else:
+          # Get parameters from @Engine annotation
+          a = logic_program.annotations.annotations.get('@Engine', {}).get('clickhouse', {})
+          connection = clickhouse_logica.ConnectToClickHouse('annotation', annotation_params=a)
+        cursor = clickhouse_logica.ClickHouseExecute(formatted_sql, connection)
+        rows = [list(map(clickhouse_logica.DigestClickHouseType, row))
+                for row in cursor.fetchall()]
+        o = sqlite3_logica.ArtisticTable([d[0] for d in cursor.description],
+                                         rows).encode()
       else:
         assert False, 'Unknown engine: %s' % engine
       try:
