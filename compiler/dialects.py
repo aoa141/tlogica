@@ -26,6 +26,7 @@ if '.' not in __package__:
   from compiler.dialect_libraries import presto_library
   from compiler.dialect_libraries import databricks_library
   from compiler.dialect_libraries import duckdb_library
+  from compiler.dialect_libraries import mssql_library
 else:
   from ..compiler.dialect_libraries import bq_library
   from ..compiler.dialect_libraries import psql_library
@@ -34,6 +35,7 @@ else:
   from ..compiler.dialect_libraries import presto_library
   from ..compiler.dialect_libraries import databricks_library
   from ..compiler.dialect_libraries import duckdb_library
+  from ..compiler.dialect_libraries import mssql_library
 def Get(engine):
   return DIALECTS[engine]()
 
@@ -451,9 +453,102 @@ class DuckDB(Dialect):
 
     def GroupBySpecBy(self):
       return 'expr'
-    
+
     def IsPostgreSQLish(self):
       return True
+
+
+class MSSQL(Dialect):
+    """Microsoft SQL Server (T-SQL) dialect"""
+
+    def Name(self):
+      return 'MSSQL'
+
+    def BuiltInFunctions(self):
+      return {
+          'ToString': 'CAST(%s AS NVARCHAR(MAX))',
+          'ToInt64': 'CAST(%s AS BIGINT)',
+          'ToFloat64': 'CAST(%s AS FLOAT)',
+          'Element': "JSON_VALUE({0}, '$[' + CAST({1} AS NVARCHAR(20)) + ']')",
+          'Range': ('(SELECT JSON_QUERY((SELECT n AS value FROM '
+                    '(SELECT TOP ({0}) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n '
+                    'FROM sys.all_objects) AS nums FOR JSON PATH), \'$\'))'),
+          'ValueOfUnnested': '{0}.value',
+          'List': 'STRING_AGG(CAST({0} AS NVARCHAR(MAX)), \',\')',
+          'Size': '(SELECT COUNT(*) FROM OPENJSON({0}))',
+          'Join': 'STRING_AGG({0}, {1})',
+          'Count': 'COUNT(DISTINCT {0})',
+          'StringAgg': 'STRING_AGG(%s, \',\')',
+          'MagicalEntangle': '(CASE WHEN {1} = 0 THEN {0} ELSE NULL END)',
+          'Format': 'FORMAT(%s)',
+          'Least': '(SELECT MIN(v) FROM (VALUES (%s)) AS T(v))',
+          'Greatest': '(SELECT MAX(v) FROM (VALUES (%s)) AS T(v))',
+          'Abs': 'ABS(%s)',
+          'Length': 'LEN(%s)',
+          'Lower': 'LOWER(%s)',
+          'Upper': 'UPPER(%s)',
+          'Trim': 'TRIM(%s)',
+          'LTrim': 'LTRIM(%s)',
+          'RTrim': 'RTRIM(%s)',
+          'Substr': 'SUBSTRING({0}, {1} + 1, {2})',
+          'Replace': 'REPLACE({0}, {1}, {2})',
+          'Round': 'ROUND({0}, {1})',
+          'Floor': 'FLOOR(%s)',
+          'Ceiling': 'CEILING(%s)',
+          'Log': 'LOG(%s)',
+          'Exp': 'EXP(%s)',
+          'Power': 'POWER({0}, {1})',
+          'Sqrt': 'SQRT(%s)',
+          'Sin': 'SIN(%s)',
+          'Cos': 'COS(%s)',
+          'Tan': 'TAN(%s)',
+          'Asin': 'ASIN(%s)',
+          'Acos': 'ACOS(%s)',
+          'Atan': 'ATAN(%s)',
+          'DateAddDay': 'DATEADD(DAY, {1}, {0})',
+          'DateDiffDay': 'DATEDIFF(DAY, {1}, {0})',
+          'CurrentDate': 'CAST(GETDATE() AS DATE)',
+          'CurrentTimestamp': 'GETDATE()',
+          'Year': 'YEAR(%s)',
+          'Month': 'MONTH(%s)',
+          'Day': 'DAY(%s)',
+          'Like': '({0} LIKE {1})',
+          'ILike': '(LOWER({0}) LIKE LOWER({1}))',
+          'IsNull': '({0} IS NULL)',
+          'Coalesce': 'COALESCE(%s)',
+          'If': 'IIF({0}, {1}, {2})',
+          'AnyValue': '(SELECT TOP 1 %s)',
+          'Split': 'STRING_SPLIT({0}, {1})',
+          'ArrayConcat': '(SELECT value FROM OPENJSON({0}) UNION ALL SELECT value FROM OPENJSON({1}) FOR JSON PATH)',
+      }
+
+    def InfixOperators(self):
+      return {
+          '++': 'CONCAT(%s, %s)',
+          '%': '(%s) %% (%s)',
+          'in': '{left} IN (SELECT value FROM OPENJSON({right}))'
+      }
+
+    def Subscript(self, record, subscript, record_is_table):
+      if record_is_table:
+        return '%s.%s' % (record, subscript)
+      else:
+        return "JSON_VALUE(%s, '$.%s')" % (record, subscript)
+
+    def LibraryProgram(self):
+      return mssql_library.library
+
+    def UnnestPhrase(self):
+      return 'OPENJSON({0}) AS {1}'
+
+    def ArrayPhrase(self):
+      return '(SELECT %s FOR JSON PATH)'
+
+    def GroupBySpecBy(self):
+      return 'expr'
+
+    def DecorateCombineRule(self, rule, var):
+      return DecorateCombineRule(rule, var)
 
 
 DIALECTS = {
@@ -464,5 +559,6 @@ DIALECTS = {
     'trino': Trino,
     'databricks': Databricks,
     'duckdb': DuckDB,
+    'mssql': MSSQL,
 }
 

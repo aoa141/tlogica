@@ -256,7 +256,7 @@ class QL(object):
           .replace("'", "''")
           .replace('\t', r'\t')
           .replace('\n', r'\n'))
-    if self.dialect.Name() in ["PostgreSQL", "Presto", "Trino", "SqLite"]:
+    if self.dialect.Name() in ["PostgreSQL", "Presto", "Trino", "SqLite", "MSSQL"]:
       # TODO: Do this safely.
       return '\'%s\'' % (literal['the_string'].replace("'", "''"))
 

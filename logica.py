@@ -344,6 +344,21 @@ def main(argv):
                               ['--output-format=ALIGNED']),
                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         o, _ = p.communicate(formatted_sql.encode())
+      elif engine == 'mssql':
+        connection_str = os.environ.get('LOGICA_MSSQL_CONNECTION')
+        if connection_str:
+          from common import mssql_logica
+          connection = mssql_logica.ConnectToMSSQL('environment')
+          cursor = mssql_logica.MSSQLExecute(formatted_sql, connection)
+          rows = [list(map(mssql_logica.DigestMSSQLType, row))
+                  for row in cursor.fetchall()]
+          o = sqlite3_logica.ArtisticTable([d[0] for d in cursor.description],
+                                           rows).encode()
+        else:
+          # Try using sqlcmd command-line tool
+          p = subprocess.Popen(['sqlcmd', '-Q', formatted_sql],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+          o, _ = p.communicate()
       else:
         assert False, 'Unknown engine: %s' % engine
       try:
