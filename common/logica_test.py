@@ -79,7 +79,7 @@ def RunTypesTest(name, src=None, golden=None,
   test_result = '{warning}RUNNING{end}'
   print(color.Format('% 50s   %s' % (name, test_result)))
 
-  program_text = open(src).read()
+  program_text = open(src, encoding='utf-8').read()
   try:
     parsed_rules = parse.ParseFile(program_text)['rule']
   except parse.ParsingException as parsing_exception:
@@ -91,9 +91,9 @@ def RunTypesTest(name, src=None, golden=None,
   result = json.dumps(parsed_rules, sort_keys=True, indent=' ')
 
   if overwrite:
-    with open(golden, 'w') as w:
+    with open(golden, 'w', encoding='utf-8') as w:
       w.write(result)
-  golden_result = open(golden).read()
+  golden_result = open(golden, encoding='utf-8').read()
 
   if result == golden_result:
     test_result = '{ok}PASSED{end}'
@@ -117,8 +117,8 @@ def RunTest(name, src, predicate, golden,
   print(color.Format('% 50s   %s' % (name, test_result)))
   if duckify_psql:
     duck_src = '/tmp/%s.l' % name
-    with open(duck_src, 'w') as duck_source:
-      duck_source.write(open(src).read().replace('"psql"', '"duckdb"'))
+    with open(duck_src, 'w', encoding='utf-8') as duck_source:
+      duck_source.write(open(src, encoding='utf-8').read().replace('"psql"', '"duckdb"'))
     src = duck_src
   if use_concertina:
     result = run_in_terminal.Run(src, predicate, display_mode='silent')
@@ -131,12 +131,12 @@ def RunTest(name, src, predicate, golden,
     result = result[result.index('+---'):]
 
   if overwrite:
-    with open(golden, 'w') as w:
+    with open(golden, 'w', encoding='utf-8') as w:
       w.write(result)
   if not os.path.isfile(golden):
     golden_result = 'This file does not exist. (<_<)'
   else:
-    golden_result = open(golden).read()
+    golden_result = open(golden, encoding='utf-8').read()
 
   if result == golden_result:
     test_result = '{ok}PASSED{end}'

@@ -189,7 +189,7 @@ def main(argv):
       print(artistic_table)
     return
 
-  program_text = open(filename).read().replace('\r\n', '\n').replace('\r', '\n')
+  program_text = open(filename, encoding='utf-8').read().replace('\r\n', '\n').replace('\r', '\n')
 
   try:
     parsed_rules = parse.ParseFile(program_text,

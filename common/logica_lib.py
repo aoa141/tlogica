@@ -43,7 +43,7 @@ else:
 
 def ParseOrExit(filename, import_root=None):
   """Parse a Logica program."""
-  with open(filename) as f:
+  with open(filename, encoding='utf-8') as f:
     program_text = f.read()
 
   try:

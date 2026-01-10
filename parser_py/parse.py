@@ -1418,7 +1418,7 @@ def ParseImport(file_import_str, parsed_imports, import_chain, import_root):
           HeritageAwareString(
               'import ' + file_import_str + '.<PREDICATE>')[7:-11])
 
-  with open(file_path) as f:
+  with open(file_path, encoding='utf-8') as f:
     file_content = f.read().replace('\r\n', '\n').replace('\r', '\n')
   parsed_file = ParseFile(file_content, file_import_str, parsed_imports,
                           import_chain, import_root)
