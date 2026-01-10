@@ -46,12 +46,23 @@ class Dialect(object):
   # Default methods:
   def MaybeCascadingDeletionWord(self):
     return ''  # No CASCADE is needed by default.
-  
+
   def PredicateLiteral(self, predicate_name):
     return "'predicate_name:%s'" % predicate_name
 
   def IsPostgreSQLish(self):
     return False
+
+  def QuoteTableIdentifier(self, table_name):
+    """Convert a backtick-quoted table identifier to dialect-appropriate quoting.
+
+    Args:
+      table_name: Table name, possibly with backticks like `schema.table`
+
+    Returns:
+      Table name with dialect-appropriate quoting (default: keep backticks)
+    """
+    return table_name
 
 class BigQueryDialect(Dialect):
   """BigQuery SQL dialect."""
@@ -463,6 +474,24 @@ class MSSQL(Dialect):
 
     def Name(self):
       return 'MSSQL'
+
+    def QuoteTableIdentifier(self, table_name):
+      """Convert backtick-quoted identifiers to T-SQL square bracket format.
+
+      Args:
+        table_name: Table name, possibly with backticks like `schema.table`
+
+      Returns:
+        Table name with square brackets like [schema].[table]
+      """
+      # Check if the table name is backtick-quoted
+      if table_name.startswith('`') and table_name.endswith('`'):
+        # Remove backticks and split by dots to handle schema.table format
+        inner = table_name[1:-1]
+        # Split by dots and wrap each part in square brackets
+        parts = inner.split('.')
+        return '.'.join('[' + part + ']' for part in parts)
+      return table_name
 
     def BuiltInFunctions(self):
       return {

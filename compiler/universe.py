@@ -1402,7 +1402,9 @@ class SubqueryTranslator(object):
     self.execution.data_dependency_edges.append((
       table,
       self.execution.workflow_predicates_stack[-1]))
-    return self.UnquoteParenthesised(table)
+    # Apply dialect-specific quoting to external table names
+    table = self.UnquoteParenthesised(table)
+    return self.execution.dialect.QuoteTableIdentifier(table)
 
   def TranslateRule(self, rule, external_vocabulary, is_combine=False):
     return self.program.SingleRuleSql(
