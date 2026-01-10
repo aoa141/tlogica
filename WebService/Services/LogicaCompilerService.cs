@@ -13,16 +13,21 @@ public class LogicaCompilerService
     public LogicaCompilerService(string? logicaPath = null, string? pythonPath = null)
     {
         _logicaPath = logicaPath ?? GetDefaultLogicaPath();
-        _pythonPath = pythonPath ?? "python";
-        _compilerScript = CreateCompilerScript();
+        _pythonPath = pythonPath ?? GetDefaultPythonPath();
+        _compilerScript = Path.Combine(_logicaPath, "WebService", "compile_logica.py");
     }
 
     private static string GetDefaultLogicaPath()
     {
-        var assemblyLocation = AppContext.BaseDirectory;
+        // Check environment variable first (used in Azure)
+        var envPath = Environment.GetEnvironmentVariable("LOGICA_PATH");
+        if (!string.IsNullOrEmpty(envPath) && Directory.Exists(envPath))
+        {
+            return envPath;
+        }
 
-        // Navigate up from bin/Debug/net10.0 to WebService, then up to repository root
-        var current = new DirectoryInfo(assemblyLocation);
+        // Navigate up from bin directory to find repository root
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current != null)
         {
             var logicaPy = Path.Combine(current.FullName, "logica.py");
@@ -33,46 +38,25 @@ public class LogicaCompilerService
             current = current.Parent;
         }
 
-        throw new InvalidOperationException("Could not find logica.py in parent directories");
+        throw new InvalidOperationException("Could not find logica.py. Set LOGICA_PATH environment variable.");
     }
 
-    private string CreateCompilerScript()
+    private static string GetDefaultPythonPath()
     {
-        var scriptPath = Path.Combine(_logicaPath, "WebService", "compile_logica.py");
-
-        if (!File.Exists(scriptPath))
+        // Check environment variable first (used in Azure)
+        var envPath = Environment.GetEnvironmentVariable("PYTHON_PATH");
+        if (!string.IsNullOrEmpty(envPath))
         {
-            var script = @"
-import sys
-import json
-
-def compile_to_sql(program_text, predicate_name):
-    try:
-        from parser_py import parse
-        from compiler import universe
-
-        parsed = parse.ParseFile(program_text)
-        rules = parsed.get('rule', [])
-
-        if not rules:
-            return {'success': False, 'error': 'No rules found in program'}
-
-        logic_program = universe.LogicaProgram(rules)
-        sql = logic_program.FormattedPredicateSql(predicate_name)
-        return {'success': True, 'sql': sql}
-    except Exception as e:
-        import traceback
-        return {'success': False, 'error': traceback.format_exc()}
-
-if __name__ == '__main__':
-    input_data = json.loads(sys.stdin.read())
-    result = compile_to_sql(input_data['program'], input_data['predicate'])
-    print(json.dumps(result))
-";
-            File.WriteAllText(scriptPath, script);
+            return envPath;
         }
 
-        return scriptPath;
+        // On Linux, prefer python3
+        if (!OperatingSystem.IsWindows())
+        {
+            return "python3";
+        }
+
+        return "python";
     }
 
     public LogicaResponse CompileToSql(LogicaRequest request)
