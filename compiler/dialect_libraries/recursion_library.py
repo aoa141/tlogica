@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
 import time
 
 def GetRecursionFunctor(depth):
@@ -139,9 +141,9 @@ def GetFlatIterativeRecursionFunctor(depth, cover, direct_args_of,
   inset = 2
   stop_file_name = ''
   if stop:
-    stop_file_name = '/tmp/logical_stop_%s_%s.json' % (
+    stop_file_name = os.path.join(tempfile.gettempdir(), 'logical_stop_%s_%s.json' % (
       str(time.time()).replace('.', ''),
-      stop)
+      stop))
   for p in sorted(cover):
     for i in range(ignition_steps):
       args = []

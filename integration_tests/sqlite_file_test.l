@@ -18,7 +18,7 @@
 @Engine("sqlite");
 
 Test(result) :-
-  filename = "/tmp/sqlite_file_test_data.txt",
+  filename = "sqlite_file_test_data.txt",
   WriteFile(filename, content: input_array) == "OK",
   input_array List= (x * 2 :- x in Range(10)),
   read_data = ReadJson(filename),

@@ -21,6 +21,7 @@ import difflib
 import os
 import subprocess
 import json
+import tempfile
 
 
 def PrintDiff(result, golden_result):
@@ -106,6 +107,10 @@ def RunTypesTest(name, src=None, golden=None,
       w.write(result)
   golden_result = open(golden, encoding='utf-8').read()
 
+  # Normalize line endings and trailing whitespace for cross-platform comparison.
+  result = result.replace('\r\n', '\n').rstrip()
+  golden_result = golden_result.replace('\r\n', '\n').rstrip()
+
   if result == golden_result:
     test_result = '{ok}PASSED{end}'
   else:
@@ -126,16 +131,22 @@ def RunTest(name, src, predicate, golden,
   test_result = '{warning}RUNNING{end}'
   print(color.Format('% 50s   %s' % (name, test_result)))
   if duckify_psql:
-    duck_src = '/tmp/%s.l' % name
+    duck_src = os.path.join(tempfile.gettempdir(), '%s.l' % name)
     with open(duck_src, 'w', encoding='utf-8') as duck_source:
       duck_source.write(open(src, encoding='utf-8').read().replace('"psql"', '"duckdb"'))
     src = duck_src
-  if use_concertina:
-    result = run_in_terminal.Run(src, predicate, display_mode='silent')
-  else:
-    result = logica_lib.RunPredicate(src, predicate,
-                                     user_flags=user_flags,
-                                     import_root=import_root)
+  try:
+    if use_concertina:
+      result = run_in_terminal.Run(src, predicate, display_mode='silent')
+    else:
+      result = logica_lib.RunPredicate(src, predicate,
+                                       user_flags=user_flags,
+                                       import_root=import_root)
+  except (FileNotFoundError, ModuleNotFoundError) as e:
+    # External tool or module not installed - skip test.
+    test_result = '{warning}SKIPPED{end}'
+    print('\033[F\033[K' + color.Format('% 50s   %s' % (name, test_result)))
+    return
   # Hacky way to remove query that BQ prints.
   if '+---' in result[200:]:
     result = result[result.index('+---'):]
@@ -147,6 +158,10 @@ def RunTest(name, src, predicate, golden,
     golden_result = 'This file does not exist. (<_<)'
   else:
     golden_result = open(golden, encoding='utf-8').read()
+
+  # Normalize line endings and trailing whitespace for cross-platform comparison.
+  result = result.replace('\r\n', '\n').rstrip()
+  golden_result = golden_result.replace('\r\n', '\n').rstrip()
 
   if result == golden_result:
     test_result = '{ok}PASSED{end}'
