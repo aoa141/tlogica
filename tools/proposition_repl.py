@@ -17,7 +17,10 @@
 # Playground to evaluate multiset propositions.
 
 import os
-import readline  # Dark magic.
+try:
+  import readline  # Dark magic. Unix-only, provides line editing in REPL.
+except ImportError:
+  pass  # readline not available on Windows.
 
 if not __package__ or '.' not in __package__:
   from parser_py import parse
