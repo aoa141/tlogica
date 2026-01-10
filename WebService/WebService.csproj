@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="IronPython" Version="3.4.*" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.*" />
   </ItemGroup>
 
 </Project>

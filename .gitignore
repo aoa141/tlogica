@@ -7,3 +7,5 @@ docs/.DS_Store
 env
 **/logica.egg-info
 **/dist
+**/bin
+**/obj
