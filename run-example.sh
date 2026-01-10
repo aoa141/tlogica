@@ -1,0 +1,1 @@
+python logica.py parent_example.l print Grandparent
