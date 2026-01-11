@@ -47,8 +47,6 @@ Set the appropriate connection environment variable:
 
 ## T-SQL (SQL Server) Support
 
-Created with Claude Code (1/9/2026)
-
 ### Files Created
 
 1. `compiler/dialect_libraries/mssql_library.py` - T-SQL specific library functions including ArgMin, ArgMax, Array, Fingerprint, etc.
@@ -84,6 +82,7 @@ ClickHouse dialect provides OLAP-optimized SQL generation.
 - ClickHouse-specific type casting
 - Backtick identifier quoting
 
+<<<<<<< HEAD
 ### Example
 
 ```logica
@@ -101,3 +100,6 @@ ProductTotal(product:, total? += amount) :- Sales(product:, amount:);
 - `compiler/dialects.py` - ClickHouse dialect class
 - `compiler/dialect_libraries/clickhouse_library.py` - ClickHouse-specific functions
 - `common/clickhouse_logica.py` - ClickHouse execution module
+=======
+  To run with a database, set LOGICA_MSSQL_CONNECTION to your connection string (ODBC format or JSON).
+>>>>>>> 17311ea0072cfab0781f685966ad86c82316d2af
