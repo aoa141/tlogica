@@ -55,6 +55,30 @@ class Dialect(object):
   def IsPostgreSQLish(self):
     return False
 
+  def RecursiveCte(self, cte_name, anchor_query, recursive_query, select_query):
+    """Generate a recursive CTE.
+
+    Args:
+      cte_name: Name of the CTE.
+      anchor_query: The base case (anchor) SQL query.
+      recursive_query: The recursive SQL query that references the CTE.
+      select_query: The final SELECT query from the CTE.
+
+    Returns:
+      Complete SQL with recursive CTE.
+    """
+    # Default implementation uses WITH RECURSIVE (standard SQL)
+    return '''WITH RECURSIVE {cte_name} AS (
+    {anchor_query}
+    UNION ALL
+    {recursive_query}
+)
+{select_query}'''.format(
+      cte_name=cte_name,
+      anchor_query=anchor_query,
+      recursive_query=recursive_query,
+      select_query=select_query)
+
   def QuoteTableIdentifier(self, table_name):
     """Convert a backtick-quoted table identifier to dialect-appropriate quoting.
 
@@ -580,6 +604,22 @@ class MSSQL(Dialect):
 
     def DecorateCombineRule(self, rule, var):
       return DecorateCombineRule(rule, var)
+
+    def RecursiveCte(self, cte_name, anchor_query, recursive_query, select_query):
+      """Generate a recursive CTE for T-SQL.
+
+      T-SQL doesn't use the RECURSIVE keyword.
+      """
+      return '''WITH {cte_name} AS (
+    {anchor_query}
+    UNION ALL
+    {recursive_query}
+)
+{select_query}'''.format(
+        cte_name=cte_name,
+        anchor_query=anchor_query,
+        recursive_query=recursive_query,
+        select_query=select_query)
 
 
 class ClickHouse(Dialect):

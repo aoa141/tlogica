@@ -45,13 +45,29 @@ def RunTest(name, src=None, golden=None, predicate=None,
             duckify_psql=True)
 
 
-def RunAll(test_presto=False, test_trino=False, test_clingo=True):
+def RunMSSQLTests():
+  """Run MSSQL LocalDB integration tests."""
+  try:
+    from integration_tests import mssql_localdb_tests
+    return mssql_localdb_tests.run_tests()
+  except ImportError as e:
+    print(f"MSSQL tests skipped: {e}")
+    return True
+  except Exception as e:
+    print(f"MSSQL tests failed: {e}")
+    return False
+
+
+def RunAll(test_presto=False, test_trino=False, test_clingo=True, test_mssql=False):
   """Running all tests."""
   # Uncomment to test writing tables.
   # RunTest("ground_test")
   # RunTest("ground_psql_test")
   # RunTest("closure_test")
   # RunTest("dialects/trino/grounding_test")
+
+  if test_mssql:
+    RunMSSQLTests()
 
   if test_presto:
     RunTest("dialects/presto/basics_test")

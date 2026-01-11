@@ -12,3 +12,5 @@ env
 
 .vs/
 *.csproj.user
+
+tmpclaude-*
