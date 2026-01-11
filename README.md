@@ -1,8 +1,6 @@
 # tlogica
 Logica fork that supports T-SQL
 
-Created with Claude Code (1/9/2026)
-
   Files Created
 
   1. compiler/dialect_libraries/mssql_library.py - T-SQL specific library functions including ArgMin, ArgMax, Array, Fingerprint, etc.
