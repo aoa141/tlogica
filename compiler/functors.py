@@ -555,12 +555,25 @@ class Functors(object):
       stop = stop['predicate_name']
     return stop
 
-  def UnfoldRecursions(self, depth_map, default_iterative, default_depth):
-    """Unfolds all recursions."""
+  def UnfoldRecursions(self, depth_map, default_iterative, default_depth,
+                       skip_unfold_predicates=None):
+    """Unfolds all recursions.
+
+    Args:
+      depth_map: Map of predicate names to recursion depth settings.
+      default_iterative: Whether to use iterative style by default.
+      default_depth: Default recursion depth.
+      skip_unfold_predicates: Set of predicate names to skip unfolding for
+        (they will use native recursive CTEs instead).
+    """
+    skip_unfold_predicates = skip_unfold_predicates or set()
     should_recurse, my_cover = self.RecursiveAnalysis(
       depth_map, default_iterative, default_depth)
     new_rules = copy.deepcopy(self.rules)
     for p, style in should_recurse.items():
+      if p in skip_unfold_predicates:
+        # Skip unfolding - this predicate will use native recursive CTE
+        continue
       depth = depth_map.get(p, {}).get('1', default_depth)
       if style == 'vertical':
         self.UnfoldRecursivePredicate(p, my_cover[p], depth, new_rules)

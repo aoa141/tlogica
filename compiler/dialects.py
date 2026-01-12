@@ -55,6 +55,23 @@ class Dialect(object):
   def IsPostgreSQLish(self):
     return False
 
+  def SupportsNativeRecursiveCte(self):
+    """Whether this dialect supports native recursive CTEs.
+
+    When True, recursive predicates will be compiled to true recursive CTEs
+    instead of depth-based unfolding (which requires @Recursive annotation).
+    """
+    return False
+
+  def NegationStyle(self):
+    """Style of negation to use.
+
+    Returns:
+      'magical_entangle' - Use MagicalEntangle pattern (default, complex)
+      'not_exists' - Use simple NOT EXISTS subquery
+    """
+    return 'magical_entangle'
+
   def RecursiveCte(self, cte_name, anchor_query, recursive_query, select_query):
     """Generate a recursive CTE.
 
@@ -501,6 +518,18 @@ class MSSQL(Dialect):
     def Name(self):
       return 'MSSQL'
 
+    def SupportsNativeRecursiveCte(self):
+      """MSSQL supports native recursive CTEs.
+
+      T-SQL natively supports recursive CTEs using WITH ... AS (anchor UNION ALL recursive)
+      syntax without the RECURSIVE keyword that PostgreSQL uses.
+      """
+      return True
+
+    def NegationStyle(self):
+      """Use NOT EXISTS for cleaner negation SQL."""
+      return 'not_exists'
+
     def QuoteTableIdentifier(self, table_name):
       """Convert backtick-quoted identifiers to T-SQL square bracket format.
 
@@ -534,7 +563,7 @@ class MSSQL(Dialect):
           'Join': 'STRING_AGG({0}, {1})',
           'Count': 'COUNT(DISTINCT {0})',
           'StringAgg': 'STRING_AGG(%s, \',\')',
-          'MagicalEntangle': '(CASE WHEN {1} = 0 THEN {0} ELSE NULL END)',
+          'MagicalEntangle': '(CASE WHEN CAST({1} AS INT) = 0 THEN {0} ELSE NULL END)',
           'Format': 'FORMAT(%s)',
           'Least': '(SELECT MIN(v) FROM (VALUES (%s)) AS T(v))',
           'Greatest': '(SELECT MAX(v) FROM (VALUES (%s)) AS T(v))',
@@ -594,10 +623,13 @@ class MSSQL(Dialect):
       return mssql_library.library
 
     def UnnestPhrase(self):
-      return 'OPENJSON({0}) AS {1}'
+      # Use OPENJSON with schema to get proper types
+      # Use NVARCHAR(MAX) which can be implicitly converted to other types
+      return "OPENJSON({0}) WITH (value NVARCHAR(MAX) '$.value') AS {1}"
 
     def ArrayPhrase(self):
-      return '(SELECT %s FOR JSON PATH)'
+      # T-SQL FOR JSON PATH requires column aliases for literal values
+      return '(SELECT %s AS value FOR JSON PATH)'
 
     def GroupBySpecBy(self):
       return 'expr'

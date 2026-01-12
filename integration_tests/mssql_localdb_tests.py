@@ -359,6 +359,34 @@ Ancestor(a, d) :- Parent(a, c), Ancestor(c, d);
         )
         self.assertTrue(queen_to_charles)
 
+    def test_native_cte_recursive_ancestor(self):
+        """Test native recursive CTE (without @Recursive annotation).
+
+        This test verifies that MSSQL can use true recursive CTEs
+        instead of depth-based unfolding when @Recursive is not specified.
+        """
+        source = '''
+@Engine("mssql");
+Parent("Alice", "Bob");
+Parent("Bob", "Carol");
+Parent("Carol", "David");
+
+Ancestor(a, d) :- Parent(a, d);
+Ancestor(a, d) :- Parent(a, c), Ancestor(c, d);
+'''
+        result = self.compile_and_execute(source, "Ancestor")
+        # Direct: Alice->Bob, Bob->Carol, Carol->David (3)
+        # Indirect: Alice->Carol, Alice->David, Bob->David (3)
+        # Total: 6
+        self.assertEqual(len(result), 6)
+
+        # Verify it includes transitive closures
+        alice_david = any(
+            r["col0"] == "Alice" and r["col1"] == "David"
+            for r in result
+        )
+        self.assertTrue(alice_david, "Alice should be ancestor of David via native CTE")
+
     # ==================== Aggregation Tests ====================
 
     def test_count_aggregation_counts_correctly(self):
@@ -454,15 +482,8 @@ SeniorHighEarner(name:) :-
 
     # ==================== Negation Tests ====================
 
-    @unittest.skip("Negation with MagicalEntangle requires MSSQL dialect enhancement for JSON array handling")
     def test_negation_excludes_matching_rows(self):
-        """Test that negation (~) correctly excludes rows.
-
-        Note: Currently skipped because the Python MSSQL dialect's implementation
-        of MagicalEntangle (used for negation) generates invalid T-SQL for JSON arrays.
-        The C# implementation handles this differently. This test serves as documentation
-        for needed dialect improvements.
-        """
+        """Test that negation (~) correctly excludes rows."""
         source = '''
 @Engine("mssql");
 Employee(name: "Alice");

@@ -94,6 +94,8 @@ class Logica(object):
     self.used_predicates = []
     self.dependencies_of = None
     self.iterations = None
+    # Track native recursive CTE being compiled (for proper self-references)
+    self.native_cte_being_compiled = None
 
   def AddDefine(self, define):
     self.defines.append(define)
@@ -685,6 +687,22 @@ class LogicaProgram(object):
   def UnfoldRecursion(self, rules):
     annotations = Annotations(rules, {})
     depth_map = annotations.annotations.get('@Recursive', {})
+
+    # Check if dialect supports native recursive CTEs
+    dialect = dialects.Get(annotations.Engine())
+    self.native_recursive_predicates = set()  # Track predicates to compile natively
+
+    if dialect.SupportsNativeRecursiveCte():
+      # Find recursive predicates that don't have @Recursive annotation
+      # These will be compiled to native CTEs instead of unfolding
+      from compiler import recursive_cte
+      rules_of = parse.DefinedPredicatesRules(rules)
+
+      for predicate_name in rules_of:
+        if predicate_name not in depth_map:  # Not explicitly marked for unfolding
+          if recursive_cte.IsRecursivePredicate(predicate_name, rules_of):
+            self.native_recursive_predicates.add(predicate_name)
+
     self.AddAutoStop(depth_map)
     self.InscribeOrbits(rules, depth_map)
     f = functors.Functors(rules)
@@ -699,7 +717,8 @@ class LogicaProgram(object):
     if quacks_like_a_duck:
       default_iterative = True
       default_depth = 32
-    return f.UnfoldRecursions(depth_map, default_iterative, default_depth)
+    return f.UnfoldRecursions(depth_map, default_iterative, default_depth,
+                              skip_unfold_predicates=self.native_recursive_predicates)
 
   def BuildUdfs(self):
     """Build UDF definitions."""
@@ -830,6 +849,10 @@ class LogicaProgram(object):
 
   def PredicateSql(self, name, allocator=None, external_vocabulary=None):
     """Producing SQL for a predicate."""
+    # Check if this should be compiled as a native recursive CTE
+    if hasattr(self, 'native_recursive_predicates') and name in self.native_recursive_predicates:
+      return self._CompileNativeRecursiveCte(name, allocator, external_vocabulary)
+
     # Load proto if necessary.
     self.CheckOrderByClause(name)
     rules = list(self.GetPredicateRules(name))
@@ -875,6 +898,116 @@ class LogicaProgram(object):
               'No rules are defining {warning}{name}{end}, but compilation '
               'was requested.', dict(name=name)),
           r'        ¯\_(ツ)_/¯')
+
+  def _CompileNativeRecursiveCte(self, name, allocator=None, external_vocabulary=None):
+    """Compile a recursive predicate to a native recursive CTE.
+
+    This is used for dialects that support native recursive CTEs (like MSSQL)
+    instead of the depth-based unfolding approach.
+    """
+    from compiler import recursive_cte
+
+    allocator = allocator or self.NewNamesAllocator()
+
+    rules = list(self.GetPredicateRules(name))
+    if not rules:
+      raise rule_translate.RuleCompileException(
+          color.Format(
+              'No rules are defining {warning}{name}{end}, but compilation '
+              'was requested.', dict(name=name)),
+          r'        ¯\_(ツ)_/¯')
+
+    # Separate base cases from recursive cases
+    base_cases, recursive_cases = recursive_cte.SeparateRecursiveRules(name, rules)
+
+    if not base_cases:
+      raise rule_translate.RuleCompileException(
+          color.Format(
+              'Recursive predicate {warning}{name}{end} has no base case.',
+              dict(name=name)),
+          rules[0].get('full_text', ''))
+
+    # Set the native CTE name so TranslateTable knows to return just the name
+    # for recursive self-references
+    self.execution.native_cte_being_compiled = name
+
+    try:
+      # Compile base case rules (anchor query)
+      anchor_queries = []
+      for rule in base_cases:
+        sql = self.SingleRuleSql(rule, allocator, external_vocabulary)
+        if sql and not sql.startswith('/* nil */'):
+          anchor_queries.append(sql.strip())
+
+      if not anchor_queries:
+        raise rule_translate.RuleCompileException(
+            color.Format(
+                'All base cases for {warning}{name}{end} are nil.',
+                dict(name=name)),
+            rules[0].get('full_text', ''))
+
+      anchor_query = '\nUNION ALL\n'.join(anchor_queries)
+
+      # Compile recursive case rules
+      recursive_queries = []
+      for rule in recursive_cases:
+        sql = self.SingleRuleSql(rule, allocator, external_vocabulary)
+        if sql and not sql.startswith('/* nil */'):
+          recursive_queries.append(sql.strip())
+
+      if not recursive_queries:
+        # No recursive cases - just return the anchor as a CTE
+        return f"WITH {name} AS (\n{anchor_query}\n)\nSELECT * FROM {name}"
+
+      recursive_query = '\nUNION ALL\n'.join(recursive_queries)
+
+      # Get column names from first rule
+      columns = recursive_cte.GetPredicateColumns(rules)
+      if columns:
+        select_columns = ', '.join(columns)
+        select_query = f"SELECT {select_columns} FROM {name}"
+      else:
+        select_query = f"SELECT * FROM {name}"
+
+      # Collect any WITH dependencies that were created during compilation
+      # (e.g., for the Parent predicate)
+      dependencies = self.execution.table_to_with_dependencies.get(name, [])
+      with_clauses = []
+      for dep in dependencies:
+        if dep in self.execution.table_to_defined_table_map:
+          table_name = self.execution.table_to_defined_table_map[dep]
+          dep_sql = self.execution.table_to_with_sql_map.get(table_name)
+          if dep_sql:
+            with_clauses.append(f'{table_name} AS ({dep_sql})')
+
+      # Use dialect's RecursiveCte method
+      dialect = dialects.Get(self.annotations.Engine())
+      recursive_cte_sql = dialect.RecursiveCte(name, anchor_query, recursive_query, select_query)
+
+      # Combine dependency CTEs with the recursive CTE
+      if with_clauses:
+        # The recursive CTE starts with "WITH name AS...", we need to integrate
+        # Extract just the CTE body from the recursive CTE
+        # Format: "WITH name AS (\n  anchor\n  UNION ALL\n  recursive\n)\nSELECT..."
+        if recursive_cte_sql.startswith('WITH '):
+          # Add dependencies as additional CTEs before the recursive one
+          result = 'WITH ' + ',\n'.join(with_clauses) + ',\n' + recursive_cte_sql[5:]
+        else:
+          result = 'WITH ' + ',\n'.join(with_clauses) + '\n' + recursive_cte_sql
+      else:
+        result = recursive_cte_sql
+
+      # Add ORDER BY and LIMIT if specified
+      result += self.annotations.OrderByClause(name)
+      result += self.annotations.LimitClause(name)
+
+      # Clear the WITH dependencies since we've included them in the CTE
+      # This prevents FormattedPredicateSql from adding them again
+      self.execution.table_to_with_dependencies[name] = []
+
+      return result
+    finally:
+      self.execution.native_cte_being_compiled = None
 
   @classmethod
   def TurnPositionalIntoNamed(self, select):
@@ -1386,6 +1519,12 @@ class SubqueryTranslator(object):
 
   def TranslateTable(self, table, external_vocabulary, edge_needed=True):
     """Translating table to an SQL string in the FROM cause."""
+    # Check if this is a self-reference within a native recursive CTE
+    if (self.execution.native_cte_being_compiled and
+        table == self.execution.native_cte_being_compiled):
+      # Return just the CTE name for recursive self-references
+      return table
+
     if table in self.program.table_aliases:
       return self.program.table_aliases[table]
     ground = self.program.annotations.Ground(table)
