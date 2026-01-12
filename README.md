@@ -123,8 +123,11 @@ The `integration_tests/mssql_localdb_tests.py` file contains integration tests t
 **Running the tests:**
 
 ```bash
-# Requires SQL Server LocalDB and pyodbc
-pip install pyodbc
+# Using the batch file (Windows)
+run_localdb_tests.bat
+
+# Or using pytest directly
+pip install pyodbc pytest
 python -m pytest integration_tests/mssql_localdb_tests.py -v
 ```
 
